@@ -1375,7 +1375,10 @@ lobbyTest(
     const title = await page
       .locator(`[data-problem="${first.card}"] .problem-title`)
       .textContent();
-    assert.equal(first.note, `Selected problem: ${title} (${(await cardInfo(page, first.card)).level}).`);
+    assert.equal(
+      first.note,
+      `Selected problem: ${title} (${(await cardInfo(page, first.card)).level}).`,
+    );
     assert.equal(first.card, eligible[1]);
     assert.deepEqual(first.levels, ["Medium", "Hard"]);
     assert.equal(first.duration, "60");
