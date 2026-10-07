@@ -79,6 +79,8 @@ let durationCeiling = Infinity;
 let roll = Math.random();
 // Keep the exclusion with the roll so restoring the page repeats the same draw.
 let avoidedProblem;
+// Preserve the draw policy as well as its roll during history/page restores.
+let pickerMode = "recommend";
 
 const nodes = {
   accountStatus: document.querySelector("#account-status"),
@@ -233,6 +235,7 @@ nodes.randomProblem.addEventListener("click", () => {
   keptDraw = null;
   roll = Math.random();
   avoidedProblem = problem?.id;
+  pickerMode = "random";
   applyDifficulties();
   recommend();
 });
@@ -263,6 +266,7 @@ for (const input of levels) {
     keptDraw = null;
     roll = Math.random();
     avoidedProblem = undefined;
+    pickerMode = "random";
     // Not before the reports are in. Recommending from an empty history here
     // would offer a problem the candidate has already passed and then swap it
     // when the fetch lands. `settle` makes the pick for this level instead, and
@@ -1021,6 +1025,7 @@ function recommend(note = "") {
     undefined,
     avoidedProblem,
     cards,
+    pickerMode,
   );
   // Nothing to offer is still an answer, and it has to go through `setProblem`
   // like every other one. Returning here left whatever was picked for the
@@ -1032,6 +1037,11 @@ function recommend(note = "") {
     return;
   }
   setProblem(choice.picked);
+  // Editing begins: When randomly selecting questions, display the difficulty level next to the question title.
+  if (pickerMode === "random") {
+    nodes.recommendation.textContent = `${note}Selected problem: ${title(choice.picked)} (${choice.picked.difficulty}).`;
+    return;
+  }
   if (choice.review) {
     // A review can fall outside the levels now selected, so the card is
     // unhidden and the level said out loud rather than silently ignored.

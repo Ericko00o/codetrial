@@ -1375,7 +1375,7 @@ lobbyTest(
     const title = await page
       .locator(`[data-problem="${first.card}"] .problem-title`)
       .textContent();
-    assert.equal(first.note, `Selected problem: ${title}.`);
+    assert.equal(first.note, `Selected problem: ${title} (${(await cardInfo(page, first.card)).level}).`);
     assert.equal(first.card, eligible[1]);
     assert.deepEqual(first.levels, ["Medium", "Hard"]);
     assert.equal(first.duration, "60");
@@ -1937,6 +1937,28 @@ lobbyTest(
     assert.equal(state.card, EASY[0]);
     assert.match(state.note, /Review due after 1 day \(Easy\)/);
     assert.equal((await cardInfo(page, EASY[0])).hidden, false);
+  },
+);
+
+lobbyTest(
+  "random selection and difficulty changes escape overdue reviews",
+  async (page) => {
+    reports = [savedAttempt(EASY[0]), savedAttempt(EASY[1])];
+    const initial = await lobby(page);
+    assert.match(initial.note, /Review due/);
+    await page.evaluate(() => {
+      Math.random = () => 0;
+    });
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    assert.equal((await cardInfo(page, drawn.card)).level, "Medium");
+    assert.doesNotMatch(drawn.note, /Review due/);
+    await restore(page);
+    await awaitReady(page);
+    assert.equal((await snapshot(page)).card, drawn.card);
+    await setLevel(page, "Hard", true);
+    await setLevel(page, "Medium", false);
+    assert.equal((await cardInfo(page, (await snapshot(page)).card)).level, "Hard");
   },
 );
 
