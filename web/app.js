@@ -81,6 +81,8 @@ let roll = Math.random();
 let avoidedProblem;
 // Preserve the draw policy as well as its roll during history/page restores.
 let pickerMode = "recommend";
+// A completed interview ends the random choice made from the old history.
+let randomDrawReports = null;
 
 const nodes = {
   accountStatus: document.querySelector("#account-status"),
@@ -634,6 +636,14 @@ function refreshHistory() {
 /// describing history the page had already replaced.
 function settle() {
   historyReady = true;
+  if (
+    pickerMode === "random" &&
+    randomDrawReports !== JSON.stringify(reports)
+  ) {
+    pickerMode = "recommend";
+    avoidedProblem = undefined;
+    randomDrawReports = null;
+  }
   // Refreshed reports that differ from the ones a kept draw came from may have
   // just recorded it as passed, so the lobby draws again.
   if (keptDraw !== null && keptDraw !== JSON.stringify(reports))
@@ -1039,6 +1049,7 @@ function recommend(note = "") {
   setProblem(choice.picked);
   // Editing begins: When randomly selecting questions, display the difficulty level next to the question title.
   if (pickerMode === "random") {
+    randomDrawReports = JSON.stringify(reports);
     nodes.recommendation.textContent = `${note}Selected problem: ${title(choice.picked)} (${choice.picked.difficulty}).`;
     return;
   }

@@ -1959,6 +1959,13 @@ lobbyTest(
     await restore(page);
     await awaitReady(page);
     assert.equal((await snapshot(page)).card, drawn.card);
+
+    reports = [hired(drawn.card), ...reports];
+    await restore(page);
+    await awaitReady(page);
+    const refreshed = await snapshot(page);
+    assert.notEqual(refreshed.card, drawn.card);
+    assert.match(refreshed.note, /Review due/);
   },
 );
 
