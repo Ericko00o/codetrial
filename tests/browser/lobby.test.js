@@ -1944,7 +1944,7 @@ lobbyTest(
 );
 
 lobbyTest(
-  "random selection and difficulty changes escape overdue reviews",
+  "random selection escapes overdue reviews and survives page restoration",
   async (page) => {
     reports = [savedAttempt(EASY[0]), savedAttempt(EASY[1])];
     const initial = await lobby(page);
@@ -1959,9 +1959,26 @@ lobbyTest(
     await restore(page);
     await awaitReady(page);
     assert.equal((await snapshot(page)).card, drawn.card);
+  },
+);
+
+lobbyTest(
+  "a difficulty change from a fresh lobby escapes overdue reviews",
+  async (page) => {
+    reports = [savedAttempt(EASY[0]), savedAttempt(EASY[1])];
+    const initial = await lobby(page);
+    assert.deepEqual(initial.levels, ["Medium"]);
+    assert.equal((await cardInfo(page, initial.card)).level, "Easy");
+    assert.match(initial.note, /Review due/);
+    await page.evaluate(() => {
+      Math.random = () => 0;
+    });
     await setLevel(page, "Hard", true);
     await setLevel(page, "Medium", false);
-    assert.equal((await cardInfo(page, (await snapshot(page)).card)).level, "Hard");
+    const changed = await snapshot(page);
+    assert.deepEqual(changed.levels, ["Hard"]);
+    assert.equal((await cardInfo(page, changed.card)).level, "Hard");
+    assert.doesNotMatch(changed.note, /Review due/);
   },
 );
 
