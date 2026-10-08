@@ -638,6 +638,7 @@ function settle() {
   historyReady = true;
   if (
     pickerMode === "random" &&
+    randomDrawReports !== null &&
     randomDrawReports !== JSON.stringify(reports)
   ) {
     pickerMode = "recommend";
