@@ -1562,9 +1562,12 @@ for (const first of [0, 1]) {
       await page.click(`[data-problem="${MEDIUM[1]}"]`);
       assert.equal((await snapshot(page)).card, MEDIUM[1]);
       await page.click("#random-problem");
-      assert.equal((await snapshot(page)).card, MEDIUM[0]);
+      const drawn = await snapshot(page);
+      assert.notEqual(drawn.card, MEDIUM[1]);
+      assert.equal((await cardInfo(page, drawn.card)).level, "Medium");
+      assert.doesNotMatch(drawn.note, /Review due/);
       await page.click("#random-problem");
-      assert.notEqual((await snapshot(page)).card, MEDIUM[0]);
+      assert.notEqual((await snapshot(page)).card, drawn.card);
     },
   );
 }
@@ -1970,7 +1973,7 @@ lobbyTest(
 );
 
 lobbyTest(
-  "a difficulty change from a fresh lobby escapes overdue reviews",
+  "a difficulty change from a fresh lobby retains review priority",
   async (page) => {
     reports = [savedAttempt(EASY[0]), savedAttempt(EASY[1])];
     const initial = await lobby(page);
@@ -1984,8 +1987,52 @@ lobbyTest(
     await setLevel(page, "Medium", false);
     const changed = await snapshot(page);
     assert.deepEqual(changed.levels, ["Hard"]);
-    assert.equal((await cardInfo(page, changed.card)).level, "Hard");
-    assert.doesNotMatch(changed.note, /Review due/);
+    assert.ok(EASY.includes(changed.card));
+    assert.match(changed.note, /Review due/);
+    assert.equal((await cardInfo(page, changed.card)).hidden, false);
+  },
+);
+
+lobbyTest(
+  "a topic change after a random draw restores review priority",
+  async (page) => {
+    const due = pageOf("valid-parentheses");
+    reports = [savedAttempt(due)];
+    await lobby(page);
+    await page.click("#random-problem");
+    assert.doesNotMatch((await snapshot(page)).note, /Review due/);
+    await openTopicFilter(page);
+    await page.selectOption("#problem-topic", "Array");
+    const changed = await snapshot(page);
+    assert.equal(changed.card, due);
+    assert.match(changed.note, /Review due/);
+    assert.equal((await cardInfo(page, due)).hidden, false);
+  },
+);
+
+lobbyTest(
+  "a difficulty change during restored history returns to recommendations",
+  async (page) => {
+    reports = [savedAttempt(EASY[0])];
+    await lobby(page);
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    assert.doesNotMatch(drawn.note, /Review due/);
+    reports = [hired(drawn.card), ...reports];
+    const release = holdHistory();
+    const pending = page.waitForRequest("**/api/reports");
+    await restore(page);
+    await pending;
+    await setLevel(page, "Hard", true);
+    await setLevel(page, "Medium", false);
+    assert.equal((await snapshot(page)).card, null);
+    release();
+    await awaitReady(page);
+    const refreshed = await snapshot(page);
+    assert.deepEqual(refreshed.levels, ["Hard"]);
+    assert.equal(refreshed.card, EASY[0]);
+    assert.match(refreshed.note, /Review due/);
+    assert.notEqual(refreshed.card, drawn.card);
   },
 );
 

@@ -238,6 +238,7 @@ nodes.randomProblem.addEventListener("click", () => {
   roll = Math.random();
   avoidedProblem = problem?.id;
   pickerMode = "random";
+  randomDrawReports = null;
   applyDifficulties();
   recommend();
 });
@@ -268,7 +269,8 @@ for (const input of levels) {
     keptDraw = null;
     roll = Math.random();
     avoidedProblem = undefined;
-    pickerMode = "random";
+    pickerMode = "recommend";
+    randomDrawReports = null;
     // Not before the reports are in. Recommending from an empty history here
     // would offer a problem the candidate has already passed and then swap it
     // when the fetch lands. `settle` makes the pick for this level instead, and
@@ -1013,6 +1015,8 @@ function filterSelectionChanged() {
   keptDraw = null;
   roll = Math.random();
   avoidedProblem = undefined;
+  pickerMode = "recommend";
+  randomDrawReports = null;
   if (historyReady) recommend();
   else {
     setProblem(null);
@@ -1048,7 +1052,8 @@ function recommend(note = "") {
     return;
   }
   setProblem(choice.picked);
-  // Editing begins: When randomly selecting questions, display the difficulty level next to the question title.
+  // A random draw is not explained by the reports, so its line names the
+  // level instead of a review interval or a streak.
   if (pickerMode === "random") {
     randomDrawReports = JSON.stringify(reports);
     nodes.recommendation.textContent = `${note}Selected problem: ${title(choice.picked)} (${choice.picked.difficulty}).`;
