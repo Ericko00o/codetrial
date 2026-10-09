@@ -664,7 +664,17 @@ test("the interview reads the focus from session storage, never from its address
 test("random draws respect narrowed practice while reviews keep their broader pool", () => {
   const reports = [completed("passed", 0)];
   const practice = bank.filter((problem) => problem.id === "fresh");
-  const draw = (mode) => pickProblem(practice, new Set(["Easy"]), reports, first, 10 * day, undefined, bank, mode);
+  const draw = (mode) =>
+    pickProblem(
+      practice,
+      new Set(["Easy"]),
+      reports,
+      first,
+      10 * day,
+      undefined,
+      bank,
+      mode,
+    );
   assert.equal(draw("recommend").picked.id, "passed");
   assert.equal(draw("random").picked.id, "fresh");
 });
