@@ -631,6 +631,8 @@ window.addEventListener("pagehide", () => {
       roll,
       avoidedProblem,
       manualDifficulty,
+      duration,
+      manualDuration,
       note: nodes.recommendation.textContent,
     };
   else delete state.codetrialRandomDraw;
@@ -643,6 +645,24 @@ function restoreLobbyDraw() {
   if (!saved) return;
   delete state.codetrialRandomDraw;
   window.history.replaceState(state, "");
+  if (
+    !Array.isArray(saved.difficulties) ||
+    !saved.difficulties.length ||
+    !saved.difficulties.every((value) =>
+      levels.some((input) => input.value === value),
+    )
+  )
+    return;
+  for (const input of levels)
+    input.checked = saved.difficulties.includes(input.value);
+  manualDifficulty = saved.manualDifficulty === true;
+  if (
+    durations.some(
+      (button) => Number(button.dataset.duration) === saved.duration,
+    )
+  )
+    setDuration(saved.duration, saved.manualDuration === true);
+  applyDifficulties();
   // Topic filters reset on every return, including one without a cached page.
   if (saved.topic) {
     storeRandomDraw(null);
@@ -655,21 +675,16 @@ function restoreLobbyDraw() {
     !card ||
     typeof saved.draw.id !== "string" ||
     !saved.draw.id ||
-    !Array.isArray(saved.difficulties) ||
     !saved.difficulties.includes(card.difficulty) ||
     !Number.isFinite(saved.roll) ||
     saved.roll < 0 ||
     saved.roll >= 1
   )
     return;
-  for (const input of levels)
-    input.checked = saved.difficulties.includes(input.value);
-  applyDifficulties();
   pickerMode = "random";
   randomDraw = saved.draw;
   roll = saved.roll;
   avoidedProblem = saved.avoidedProblem;
-  manualDifficulty = saved.manualDifficulty === true;
   setProblem(card);
   nodes.recommendation.textContent =
     typeof saved.note === "string" ? saved.note : "";

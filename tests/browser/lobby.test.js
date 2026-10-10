@@ -4850,3 +4850,57 @@ lobbyTest(
     assert.match(returned.note, /Review due/);
   },
 );
+
+lobbyTest(
+  "real Back keeps explicit difficulties when resetting a topic draw",
+  async (page) => {
+    reports = [hired(EASY[0]), hired(EASY[1])];
+    await lobby(page);
+    await setLevel(page, "Hard", true);
+    await setLevel(page, "Medium", false);
+    await openTopicFilter(page);
+    await page.selectOption("#problem-topic", "Array");
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    assert.deepEqual(drawn.levels, ["Hard"]);
+    await page.click("#start");
+    await page.waitForURL(/\/interview/);
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => !document.querySelector("#start").disabled,
+    );
+    assert.equal(await page.locator("#problem-topic").inputValue(), "");
+    assert.deepEqual((await snapshot(page)).levels, ["Hard"]);
+    assert.equal(
+      (await cardInfo(page, (await snapshot(page)).card)).level,
+      "Hard",
+    );
+    await restore(page);
+    await awaitReady(page);
+    assert.deepEqual((await snapshot(page)).levels, ["Hard"]);
+  },
+);
+
+for (const topic of ["", "Array"]) {
+  lobbyTest(
+    `real Back retains a manual duration and its latch with topic ${topic || "All"}`,
+    async (page) => {
+      await lobby(page);
+      if (topic) {
+        await openTopicFilter(page);
+        await page.selectOption("#problem-topic", topic);
+      }
+      await page.click("#random-problem");
+      await page.click('[data-duration="60"]');
+      await page.click("#start");
+      await page.waitForURL(/\/interview/);
+      await page.goBack({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(
+        () => !document.querySelector("#start").disabled,
+      );
+      assert.equal((await snapshot(page)).duration, "60");
+      await setLevel(page, "Hard", true);
+      assert.equal((await snapshot(page)).duration, "60");
+    },
+  );
+}
