@@ -79,10 +79,10 @@ let durationCeiling = Infinity;
 let roll = Math.random();
 // Keep the exclusion with the roll so restoring the page repeats the same draw.
 let avoidedProblem;
-// Preserve the draw policy as well as its roll during history/page restores.
+// Keep the draw policy until its filters change or its interview completes.
 let pickerMode = "recommend";
-// A completed interview ends the random choice made from the old history.
-let randomDrawReports = null;
+// Only a new graded attempt at the drawn problem ends the random choice.
+let randomDraw = null;
 
 const nodes = {
   accountStatus: document.querySelector("#account-status"),
@@ -238,7 +238,7 @@ nodes.randomProblem.addEventListener("click", () => {
   roll = Math.random();
   avoidedProblem = problem?.id;
   pickerMode = "random";
-  randomDrawReports = null;
+  randomDraw = null;
   applyDifficulties();
   recommend();
 });
@@ -270,7 +270,7 @@ for (const input of levels) {
     roll = Math.random();
     avoidedProblem = undefined;
     pickerMode = "recommend";
-    randomDrawReports = null;
+    randomDraw = null;
     // Not before the reports are in. Recommending from an empty history here
     // would offer a problem the candidate has already passed and then swap it
     // when the fetch lands. `settle` makes the pick for this level instead, and
@@ -521,6 +521,7 @@ window.addEventListener("pageshow", (event) => {
   // late enough to re-enable a button the candidate already pressed and hand
   // them a second navigation.
   if (!event.persisted) return;
+  const resetDraw = nodes.problemTopic.value !== "";
   nodes.problemTopic.value = "";
   applyProblemFilters();
   // The cache holds the page as it was before the candidate left, and a login
@@ -532,6 +533,7 @@ window.addEventListener("pageshow", (event) => {
   // out did not happen, and a latch left set here disables the button for good.
   starting = false;
   refreshHistory();
+  if (resetDraw) filterSelectionChanged();
 });
 
 nodes.githubLogin.addEventListener("keydown", (event) => {
@@ -640,12 +642,23 @@ function settle() {
   historyReady = true;
   if (
     pickerMode === "random" &&
-    randomDrawReports !== null &&
-    randomDrawReports !== JSON.stringify(reports)
+    randomDraw !== null &&
+    reports.some(
+      (entry) =>
+        entry.problemId === randomDraw.problemId &&
+        Number.isFinite(entry.at) &&
+        entry.at >= randomDraw.at &&
+        !entry.report?.incomplete &&
+        ["HIRE", "NO_HIRE"].includes(entry.report?.decision),
+    )
   ) {
     pickerMode = "recommend";
     avoidedProblem = undefined;
-    randomDrawReports = null;
+    randomDraw = null;
+    keptDraw = null;
+  } else if (pickerMode === "random" && randomDraw !== null) {
+    // Deletion and account-history merges do not revoke a displayed draw.
+    keptDraw = JSON.stringify(reports);
   }
   // Refreshed reports that differ from the ones a kept draw came from may have
   // just recorded it as passed, so the lobby draws again.
@@ -654,7 +667,10 @@ function settle() {
   // The level suggestion only applies when the candidate has not already said
   // what they want. Moving their checkboxes would also hide the card they just
   // picked.
-  const note = manualDifficulty || manualProblem ? "" : applySuggestedLevel();
+  const note =
+    manualDifficulty || manualProblem || randomDraw !== null
+      ? ""
+      : applySuggestedLevel();
   recommend(note);
   // `recommend` returns without touching anything when the candidate's own pick
   // still stands, so the button the account refresh held down needs releasing
@@ -1016,7 +1032,7 @@ function filterSelectionChanged() {
   roll = Math.random();
   avoidedProblem = undefined;
   pickerMode = "recommend";
-  randomDrawReports = null;
+  randomDraw = null;
   if (historyReady) recommend();
   else {
     setProblem(null);
@@ -1055,7 +1071,7 @@ function recommend(note = "") {
   // A random draw is not explained by the reports, so its line names the
   // level instead of a review interval or a streak.
   if (pickerMode === "random") {
-    randomDrawReports = JSON.stringify(reports);
+    randomDraw = { problemId: choice.picked.id, at: Date.now() };
     nodes.recommendation.textContent = `${note}Selected problem: ${title(choice.picked)} (${choice.picked.difficulty}).`;
     return;
   }

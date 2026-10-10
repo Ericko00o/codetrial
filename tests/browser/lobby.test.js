@@ -1963,12 +1963,85 @@ lobbyTest(
     await awaitReady(page);
     assert.equal((await snapshot(page)).card, drawn.card);
 
-    reports = [hired(drawn.card), ...reports];
+    reports = [
+      { ...hired(drawn.card), createdAt: Date.now() / 1000 },
+      ...reports,
+    ];
     await restore(page);
     await awaitReady(page);
     const refreshed = await snapshot(page);
     assert.notEqual(refreshed.card, drawn.card);
     assert.match(refreshed.note, /Review due/);
+  },
+);
+
+lobbyTest(
+  "deleting an unrelated report preserves a random draw",
+  async (page) => {
+    reports = [
+      { ...savedAttempt(EASY[0]), id: "due" },
+      {
+        ...savedAttempt(EASY[1]),
+        id: "old",
+        payload: {
+          ...savedAttempt(EASY[1]).payload,
+          date: "2025-12-01T00:00:00Z",
+        },
+      },
+    ];
+    await lobby(page);
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("#attempt-history [data-delete-report]").nth(1).click();
+    await settles(
+      page,
+      () => document.querySelector("#report-delete-status").textContent !== "",
+    );
+    assert.deepEqual(deletedIds, ["old"]);
+    const refreshed = await snapshot(page);
+    assert.equal(refreshed.card, drawn.card);
+    assert.equal(refreshed.note, drawn.note);
+    assert.deepEqual(refreshed.levels, drawn.levels);
+  },
+);
+
+lobbyTest(
+  "merging older account attempts preserves a random draw",
+  async (page) => {
+    await lobby(page);
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    reports = [savedAttempt(drawn.card), savedAttempt(EASY[0])];
+    session = { signedIn: true, user: { login: "another-account" } };
+    await restore(page);
+    await awaitReady(page);
+    const refreshed = await snapshot(page);
+    assert.equal(refreshed.card, drawn.card);
+    assert.equal(refreshed.note, drawn.note);
+    assert.deepEqual(refreshed.levels, drawn.levels);
+  },
+);
+
+lobbyTest(
+  "restoring a topic-filtered random draw resets its policy with the topic",
+  async (page) => {
+    const due = pageOf("valid-parentheses");
+    reports = [savedAttempt(due)];
+    await lobby(page);
+    await openTopicFilter(page);
+    await page.selectOption("#problem-topic", "Array");
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    assert.ok(TOPICS_BY_PAGE[drawn.card].includes("Array"));
+    assert.doesNotMatch(drawn.note, /Review due/);
+    await restore(page);
+    await awaitReady(page);
+    const refreshed = await snapshot(page);
+    assert.equal(await page.locator("#problem-topic").inputValue(), "");
+    assert.equal(refreshed.card, due);
+    assert.match(refreshed.note, /Review due/);
+    assert.equal((await cardInfo(page, due)).hidden, false);
   },
 );
 
@@ -2018,7 +2091,10 @@ lobbyTest(
     await page.click("#random-problem");
     const drawn = await snapshot(page);
     assert.doesNotMatch(drawn.note, /Review due/);
-    reports = [hired(drawn.card), ...reports];
+    reports = [
+      { ...hired(drawn.card), createdAt: Date.now() / 1000 },
+      ...reports,
+    ];
     const release = holdHistory();
     const pending = page.waitForRequest("**/api/reports");
     await restore(page);
