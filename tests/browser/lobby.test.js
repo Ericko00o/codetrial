@@ -1946,6 +1946,20 @@ lobbyTest(
   },
 );
 
+async function finishRandomDraw(page, decision = "HIRE") {
+  await page.evaluate(async (decision) => {
+    const { readRandomDraw, completeRandomDraw } =
+      await import("/random-draw.js");
+    const problemId = document.querySelector(".problem-card.selected").dataset
+      .problem;
+    const draw = readRandomDraw(problemId, sessionStorage);
+    completeRandomDraw(
+      draw,
+      { id: "completed-interview", problemId, report: { decision } },
+      sessionStorage,
+    );
+  }, decision);
+}
 lobbyTest(
   "random selection escapes overdue reviews and survives page restoration",
   async (page) => {
@@ -1963,6 +1977,7 @@ lobbyTest(
     await awaitReady(page);
     assert.equal((await snapshot(page)).card, drawn.card);
 
+    await finishRandomDraw(page);
     reports = [
       { ...hired(drawn.card), createdAt: Date.now() / 1000 },
       ...reports,
@@ -2091,6 +2106,7 @@ lobbyTest(
     await page.click("#random-problem");
     const drawn = await snapshot(page);
     assert.doesNotMatch(drawn.note, /Review due/);
+    await finishRandomDraw(page);
     reports = [
       { ...hired(drawn.card), createdAt: Date.now() / 1000 },
       ...reports,
@@ -4619,3 +4635,35 @@ lobbyTest(
     }
   },
 );
+
+for (const decision of ["HIRE", "NO_HIRE"]) {
+  lobbyTest(
+    `a completed ${decision} draw survives a backward clock adjustment`,
+    async (page) => {
+      reports = [savedAttempt(EASY[0])];
+      await lobby(page);
+      await page.evaluate(() => {
+        const now = Date.now;
+        Date.now = () => now() + 300000;
+      });
+      await page.click("#random-problem");
+      const drawn = await snapshot(page);
+      await page.evaluate(() => {
+        Date.now = () => new Date().getTime();
+      });
+      await finishRandomDraw(page, decision);
+      reports = [
+        {
+          ...hired(drawn.card),
+          createdAt: Date.now() / 1000,
+          payload: { report: { decision } },
+        },
+        ...reports,
+      ];
+      await restore(page);
+      await awaitReady(page);
+      assert.notEqual((await snapshot(page)).card, drawn.card);
+      assert.match((await snapshot(page)).note, /Review due/);
+    },
+  );
+}

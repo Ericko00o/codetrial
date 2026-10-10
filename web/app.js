@@ -1,3 +1,8 @@
+import {
+  consumeRandomDraw,
+  createRandomDraw,
+  storeRandomDraw,
+} from "./random-draw.js";
 import { FRAMEWORKS, codingLoop, interviewMode } from "./lib.js";
 import {
   clearReportHistory,
@@ -224,6 +229,9 @@ nodes.problemPicker.addEventListener("toggle", () => {
 // has not already chosen one.
 for (const card of cards) {
   card.button.addEventListener("click", () => {
+    pickerMode = "recommend";
+    randomDraw = null;
+    storeRandomDraw(null);
     manualProblem = true;
     setProblem(card);
     setDuration(suggestedDuration(new Set([card.difficulty])));
@@ -239,6 +247,7 @@ nodes.randomProblem.addEventListener("click", () => {
   avoidedProblem = problem?.id;
   pickerMode = "random";
   randomDraw = null;
+  storeRandomDraw(null);
   applyDifficulties();
   recommend();
 });
@@ -271,6 +280,7 @@ for (const input of levels) {
     avoidedProblem = undefined;
     pickerMode = "recommend";
     randomDraw = null;
+    storeRandomDraw(null);
     // Not before the reports are in. Recommending from an empty history here
     // would offer a problem the candidate has already passed and then swap it
     // when the fetch lands. `settle` makes the pick for this level instead, and
@@ -437,6 +447,7 @@ start.addEventListener("click", async () => {
     setStartGate(signInFirst);
     return;
   }
+  storeRandomDraw(manualProblem ? null : randomDraw);
   window.location.href = destination.toString();
 });
 
@@ -643,18 +654,12 @@ function settle() {
   if (
     pickerMode === "random" &&
     randomDraw !== null &&
-    reports.some(
-      (entry) =>
-        entry.problemId === randomDraw.problemId &&
-        Number.isFinite(entry.at) &&
-        entry.at >= randomDraw.at &&
-        !entry.report?.incomplete &&
-        ["HIRE", "NO_HIRE"].includes(entry.report?.decision),
-    )
+    consumeRandomDraw(randomDraw)
   ) {
     pickerMode = "recommend";
     avoidedProblem = undefined;
     randomDraw = null;
+    storeRandomDraw(null);
     keptDraw = null;
   } else if (pickerMode === "random" && randomDraw !== null) {
     // Deletion and account-history merges do not revoke a displayed draw.
@@ -1033,6 +1038,7 @@ function filterSelectionChanged() {
   avoidedProblem = undefined;
   pickerMode = "recommend";
   randomDraw = null;
+  storeRandomDraw(null);
   if (historyReady) recommend();
   else {
     setProblem(null);
@@ -1071,7 +1077,8 @@ function recommend(note = "") {
   // A random draw is not explained by the reports, so its line names the
   // level instead of a review interval or a streak.
   if (pickerMode === "random") {
-    randomDraw = { problemId: choice.picked.id, at: Date.now() };
+    randomDraw = createRandomDraw(choice.picked.id);
+    storeRandomDraw(randomDraw);
     nodes.recommendation.textContent = `${note}Selected problem: ${title(choice.picked)} (${choice.picked.difficulty}).`;
     return;
   }
@@ -1344,6 +1351,9 @@ function renderAttemptHistory(attempts) {
         (candidate) => candidate.id === attempt.problemId,
       );
       if (!card) return;
+      pickerMode = "recommend";
+      randomDraw = null;
+      storeRandomDraw(null);
       manualProblem = true;
       card.button.hidden = false;
       setProblem(card);
