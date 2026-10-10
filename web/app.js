@@ -1,6 +1,7 @@
 import {
   consumeRandomDraw,
   createRandomDraw,
+  randomDrawCompleted,
   storeRandomDraw,
 } from "./random-draw.js";
 import { FRAMEWORKS, codingLoop, interviewMode } from "./lib.js";
@@ -392,6 +393,8 @@ start.addEventListener("click", async () => {
   destination.searchParams.set("duration", String(duration));
   destination.searchParams.set("loop", interviewLoop);
   destination.searchParams.set("mode", mode);
+  if (!manualProblem && randomDraw !== null)
+    destination.searchParams.set("draw", randomDraw.id);
   const profile = {
     role: nodes.profileRole.value.trim(),
     seniority: nodes.profileSeniority.value,
@@ -617,7 +620,63 @@ nodes.logout.addEventListener("click", async () => {
   }
 });
 
+// The browser may reconstruct the lobby instead of restoring its JS heap.
+window.addEventListener("pagehide", () => {
+  const state = { ...window.history.state };
+  if (pickerMode === "random" && randomDraw !== null)
+    state.codetrialRandomDraw = {
+      draw: randomDraw,
+      difficulties: [...selectedDifficulties()],
+      topic: nodes.problemTopic.value,
+      roll,
+      avoidedProblem,
+      manualDifficulty,
+      note: nodes.recommendation.textContent,
+    };
+  else delete state.codetrialRandomDraw;
+  window.history.replaceState(state, "");
+});
+
+function restoreLobbyDraw() {
+  const state = { ...window.history.state };
+  const saved = state.codetrialRandomDraw;
+  if (!saved) return;
+  delete state.codetrialRandomDraw;
+  window.history.replaceState(state, "");
+  // Topic filters reset on every return, including one without a cached page.
+  if (saved.topic) {
+    storeRandomDraw(null);
+    return;
+  }
+  const card = cards.find(
+    (candidate) => candidate.id === saved.draw?.problemId,
+  );
+  if (
+    !card ||
+    typeof saved.draw.id !== "string" ||
+    !saved.draw.id ||
+    !Array.isArray(saved.difficulties) ||
+    !saved.difficulties.includes(card.difficulty) ||
+    !Number.isFinite(saved.roll) ||
+    saved.roll < 0 ||
+    saved.roll >= 1
+  )
+    return;
+  for (const input of levels)
+    input.checked = saved.difficulties.includes(input.value);
+  applyDifficulties();
+  pickerMode = "random";
+  randomDraw = saved.draw;
+  roll = saved.roll;
+  avoidedProblem = saved.avoidedProblem;
+  manualDifficulty = saved.manualDifficulty === true;
+  setProblem(card);
+  nodes.recommendation.textContent =
+    typeof saved.note === "string" ? saved.note : "";
+}
+
 applyDifficulties();
+restoreLobbyDraw();
 // Nothing is recommended before the reports arrive, because they choose the
 // level as well as the problem. The button ships disabled and `setProblem` is
 // what enables it, so the gap is a button that cannot be pressed rather than
@@ -654,7 +713,7 @@ function settle() {
   if (
     pickerMode === "random" &&
     randomDraw !== null &&
-    consumeRandomDraw(randomDraw)
+    (consumeRandomDraw(randomDraw) || randomDrawCompleted(randomDraw, reports))
   ) {
     pickerMode = "recommend";
     avoidedProblem = undefined;

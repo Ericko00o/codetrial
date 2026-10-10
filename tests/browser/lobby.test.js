@@ -4667,3 +4667,186 @@ for (const decision of ["HIRE", "NO_HIRE"]) {
     },
   );
 }
+
+lobbyTest(
+  "starting a random interview carries its draw identity in the destination",
+  async (page) => {
+    await lobby(page);
+    await page.click("#random-problem");
+    const drawn = await snapshot(page);
+    const draw = await page.evaluate(async (problemId) => {
+      const { readRandomDraw } = await import("/random-draw.js");
+      return readRandomDraw(problemId, sessionStorage);
+    }, drawn.card);
+    await page.click("#start");
+    await page.waitForURL(/\/interview/);
+    const destination = new URL(page.url());
+    assert.equal(destination.searchParams.get("problem"), drawn.card);
+    assert.equal(destination.searchParams.get("draw"), draw.id);
+  },
+);
+
+for (const decision of ["HIRE", "NO_HIRE"]) {
+  lobbyTest(
+    `a completed ${decision} draw returns to reviews with blocked sessionStorage`,
+    async (page) => {
+      reports = [savedAttempt(EASY[0])];
+      await lobby(page);
+      await page.click("#random-problem");
+      const drawn = await snapshot(page);
+      const draw = await page.evaluate(async (problemId) => {
+        const { readRandomDraw } = await import("/random-draw.js");
+        const ticket = readRandomDraw(problemId, sessionStorage);
+        Object.defineProperty(window, "sessionStorage", {
+          configurable: true,
+          get() {
+            throw new Error("blocked");
+          },
+        });
+        return ticket;
+      }, drawn.card);
+      const completed = {
+        ...hired(drawn.card),
+        payload: {
+          id: "completed-interview",
+          problemId: drawn.card,
+          randomDrawId: draw.id,
+          report: { decision },
+        },
+      };
+      reports = [
+        {
+          ...completed,
+          payload: { ...completed.payload, randomDrawId: "older-draw" },
+        },
+        ...reports,
+      ];
+      await restore(page);
+      await awaitReady(page);
+      assert.equal((await snapshot(page)).card, drawn.card);
+      reports = [
+        {
+          ...completed,
+          payload: {
+            ...completed.payload,
+            report: { decision, incomplete: true },
+          },
+        },
+        ...reports,
+      ];
+      await restore(page);
+      await awaitReady(page);
+      assert.equal((await snapshot(page)).card, drawn.card);
+      reports = [completed, ...reports];
+      await restore(page);
+      await awaitReady(page);
+      const refreshed = await snapshot(page);
+      assert.notEqual(refreshed.card, drawn.card);
+      assert.match(refreshed.note, /Review due/);
+    },
+  );
+}
+
+for (const blockedStorage of [false, true]) {
+  lobbyTest(
+    `an unfinished random interview keeps its draw after a real Back navigation with storage ${blockedStorage ? "blocked" : "available"}`,
+    async (page) => {
+      reports = [savedAttempt(EASY[0])];
+      await lobby(page);
+      await page.click("#random-problem");
+      const drawn = await snapshot(page);
+      await page.evaluate(() => {
+        window.beforeInterviewNavigation = true;
+      });
+      await page.click("#start");
+      await page.waitForURL(/\/interview/);
+      if (blockedStorage)
+        await page.addInitScript(() => {
+          Object.defineProperty(window, "sessionStorage", {
+            configurable: true,
+            get() {
+              throw new Error("blocked");
+            },
+          });
+        });
+      await page.goBack({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(
+        () => document.querySelector("#recommendation").textContent !== "",
+      );
+      await awaitReady(page);
+      assert.equal(
+        await page.evaluate(() => window.beforeInterviewNavigation),
+        undefined,
+      );
+      const returned = await snapshot(page);
+      assert.equal(returned.card, drawn.card);
+      assert.deepEqual(returned.levels, drawn.levels);
+      assert.doesNotMatch(returned.note, /Review due/);
+    },
+  );
+}
+
+for (const blockedStorage of [false, true]) {
+  lobbyTest(
+    `a graded random interview resumes reviews after real Back with storage ${blockedStorage ? "blocked" : "available"}`,
+    async (page) => {
+      reports = [savedAttempt(EASY[0])];
+      await lobby(page);
+      await page.click("#random-problem");
+      const drawn = await snapshot(page);
+      await page.click("#start");
+      await page.waitForURL(/\/interview/);
+      const drawId = new URL(page.url()).searchParams.get("draw");
+      reports = [
+        {
+          ...hired(drawn.card),
+          payload: {
+            id: "completed-interview",
+            problemId: drawn.card,
+            randomDrawId: drawId,
+            report: { decision: "HIRE" },
+          },
+        },
+        ...reports,
+      ];
+      if (blockedStorage)
+        await page.addInitScript(() => {
+          Object.defineProperty(window, "sessionStorage", {
+            configurable: true,
+            get() {
+              throw new Error("blocked");
+            },
+          });
+        });
+      await page.goBack({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(
+        () => !document.querySelector("#start").disabled,
+      );
+      const returned = await snapshot(page);
+      assert.notEqual(returned.card, drawn.card);
+      assert.match(returned.note, /Review due/);
+    },
+  );
+}
+
+lobbyTest(
+  "real Back resets a topic-filtered random draw with its topic",
+  async (page) => {
+    const due = pageOf("valid-parentheses");
+    reports = [savedAttempt(due)];
+    await lobby(page);
+    await openTopicFilter(page);
+    await page.selectOption("#problem-topic", "Array");
+    await page.click("#random-problem");
+    await page.click("#start");
+    await page.waitForURL(/\/interview/);
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => !document.querySelector("#start").disabled,
+    );
+    const returned = await snapshot(page);
+    assert.equal(await page.locator("#problem-topic").inputValue(), "");
+    assert.equal(returned.card, due);
+    assert.match(returned.note, /Review due/);
+  },
+);

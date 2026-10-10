@@ -78,3 +78,19 @@ export function consumeRandomDraw(draw, storage) {
   storeRandomDraw(null, storage);
   return true;
 }
+
+// The report carries the navigation ticket when tab storage cannot carry it.
+export function randomDrawCompleted(draw, reports) {
+  return (
+    draw !== null &&
+    reports.some(
+      (entry) =>
+        entry.randomDrawId === draw.id &&
+        entry.problemId === draw.problemId &&
+        typeof entry.id === "string" &&
+        entry.id.length > 0 &&
+        !entry.report?.incomplete &&
+        ["HIRE", "NO_HIRE"].includes(entry.report?.decision),
+    )
+  );
+}

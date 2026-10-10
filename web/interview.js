@@ -361,7 +361,9 @@ function renderRoundPlan() {
 /// Read once, through `storageArea`: at module scope a blocked `sessionStorage`
 /// would otherwise stop the whole page from loading.
 const tabStorage = storageArea("sessionStorage");
-const randomDrawTicket = readRandomDraw(params.get("problem"), tabStorage);
+const randomDrawTicket = params.get("draw")
+  ? { id: params.get("draw"), problemId: params.get("problem") }
+  : readRandomDraw(params.get("problem"), tabStorage);
 const interviewProfile = {
   role: params.get("role") || "",
   seniority: params.get("seniority") || "",
@@ -3018,6 +3020,7 @@ async function saveHistory(report = state.report) {
     id: state.reportId,
     date: new Date().toISOString(),
     interviewId: state.interviewId,
+    randomDrawId: randomDrawTicket?.id ?? null,
     problemId: problem.page,
     problemTitle: problem.title,
     difficulty: problem.difficulty,
